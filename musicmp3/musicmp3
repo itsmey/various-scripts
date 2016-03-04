@@ -1,0 +1,134 @@
+#!/usr/bin/python
+# -*- coding: utf8 -*-
+
+import sys
+import requests
+import re
+import os
+
+def usage():
+  return """
+  Use this script to download an MP3 album from the site.
+  Use your web browser to determine http link of the album :-)
+  Album folder will be automatically created in a current directory.
+
+  Usage: musicmp3 <musicmp3spb.org album links>
+  Example: musicmp3 http://musicmp3spb.org/album/lonerism.html
+  """
+
+### Auxiliary functions ###
+
+def searchTagAndExtractValue(regexp, text):
+  m = re.search(regexp, text)
+  if m:
+    m = re.search('>.*<', m.group(0).replace("\n", ""))
+    return m.group(0)[1:-1]
+  else:
+    return
+
+def searchRegExp(regexp, text):
+  m = re.search(regexp, text)
+  if m:
+    return m.group(0)
+  else:
+    return
+
+def getHtml(url):
+  try:
+    r = requests.get(url)
+    return r.text
+  except:
+    print url, "is not valid html link. aborting"
+    return
+
+def download(url, where):
+  songFile = requests.get(url)
+  f = open(where, 'wb')
+  for chunk in songFile.iter_content(chunk_size=512 * 1024):
+      if chunk:
+          f.write(chunk)
+  f.close()
+
+### Lame musicmp3spb.org regexp parsing ###
+
+def extractAlbumInfo(albumHtml):
+  title = searchTagAndExtractValue(r'<div class="Name">\n.*<', albumHtml)
+  if not title:
+    return
+  artist = searchTagAndExtractValue(r'<a href="/artist/.*</a>', albumHtml)
+  if not artist:
+    return
+  year = searchTagAndExtractValue(r'<i>[0-9]*</i>', albumHtml)
+  if not year:
+    return
+  return (title, artist[:-4], year)
+
+def extractSongsLinks(albumHtml):
+  links = re.findall(r'<a href="/download[^<>]*?" title', albumHtml)
+  for i in range(len(links)):
+    link = links[i]
+    links[i] = "http://musicmp3spb.org" + link[9:-7]
+  return links
+
+def extractSongFilename(songHtml):
+  return searchTagAndExtractValue(r'<a href="/file/[0-9]*">.*?</a>', songHtml)
+
+def getFinalLink(songHtml):
+  link = "http://tempfile.ru" + searchRegExp(r'<a href="/file/[0-9]*">', songHtml)[9:-2]
+  robotcode = searchRegExp(r'name="robot_code" value="[0-9a-z]*"', songHtml)[25:-1]
+  linkHtml = requests.post(link, data={'robot_code': robotcode})
+  return searchTagAndExtractValue(r'<a href="http://tempfile.ru/download/[0-9a-z]*">.*?</a>', linkHtml.text)
+
+### Album handling ###
+
+def downloadAlbum(albumLink):
+  print "------"
+  print "processing link", albumLink
+
+  albumHtml = getHtml(albumLink)
+  if albumHtml:
+    albumInfo = extractAlbumInfo(albumHtml)
+    if not albumInfo:
+      print "can't extract album info. aborting"
+      return
+
+    print "album info extracted:"
+    print "Title:", albumInfo[0]
+    print "Artist:", albumInfo[1]
+    print "Year:", albumInfo[2]
+
+    directory = albumInfo[1] + " - " + albumInfo[0]
+    if not os.path.exists(directory):
+      os.makedirs(directory)
+
+    links = extractSongsLinks(albumHtml)
+    if links == []:
+      print "can't extract any song link. aborting"
+      return
+    for link in links:
+      downloadSong(link, directory)
+
+    print "album downloaded"
+
+def downloadSong(songLink, directory):
+  print ""
+
+  songHtml = getHtml(songLink)
+  if songHtml:
+    filename = extractSongFilename(songHtml)
+    print "file name is", filename
+
+    finalLink = getFinalLink(songHtml)
+
+    print "downloading song..."
+    download(finalLink, directory + "/" + filename)
+    print "song downloaded"
+
+### Main ###
+
+if len(sys.argv) < 2:
+  print usage()
+  sys.exit()
+
+for albumLink in sys.argv[1:]:
+  downloadAlbum(albumLink)
