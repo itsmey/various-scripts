@@ -74,10 +74,13 @@ def extractSongFilename(songHtml):
   return searchTagAndExtractValue(r'<a href="/file/[0-9]*">.*?</a>', songHtml)
 
 def getFinalLink(songHtml):
-  link = "http://tempfile.ru" + searchRegExp(r'<a href="/file/[0-9]*">', songHtml)[9:-2]
-  robotcode = searchRegExp(r'name="robot_code" value="[0-9a-z]*"', songHtml)[25:-1]
+  link = "http://tempfile.ru" + searchRegExp(
+    r'<a href="/file/[0-9]*">', songHtml)[9:-2]
+  robotcode = searchRegExp(
+    r'name="robot_code" value="[0-9a-z]*"', songHtml)[25:-1]
   linkHtml = requests.post(link, data={'robot_code': robotcode})
-  return searchTagAndExtractValue(r'<a href="http://tempfile.ru/download/[0-9a-z]*">.*?</a>', linkHtml.text)
+  return searchTagAndExtractValue(
+    r'<a href="http://tempfile.ru/download/[0-9a-z]*">.*?</a>', linkHtml.text)
 
 ### Album handling ###
 
