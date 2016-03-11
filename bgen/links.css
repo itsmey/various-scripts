@@ -1,0 +1,44 @@
+body {
+   background-color: #363636;
+    margin: 2%;
+    padding: 10px;
+}
+
+/* unvisited link */
+a:link {
+    color: #FFFFFF;
+    text-decoration: none;
+}
+
+/* visited link */
+a:visited {
+    color: #FFFFFF;
+    text-decoration: none;
+}
+
+/* mouse over link */
+a:hover {
+    color: #FF0000;
+    text-decoration: none;
+}
+
+/* selected link */
+a:active {
+    color: #FF0000;
+    text-decoration: none;
+}
+
+.column {
+    -webkit-column-width: 33%;
+    -moz-column-width: 33%;
+    column-width: 33%;
+    -webkit-column-count: 4;
+    -moz-column-count: 4;
+    column-count: 4;
+    -webkit-column-gap: 30px;
+    -moz-column-gap: 30px;
+    column-gap: 30px;
+    /*-webkit-column-rule: 1px solid #ccc;
+    -moz-column-rule: 1px solid #ccc;
+    column-rule: 1px solid #ccc;*/
+}

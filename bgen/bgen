@@ -1,0 +1,155 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+-mode(compile).
+
+-export([link/2, header/1]).
+
+-define(TEMPL, "html_templ").
+-define(NEWLINE, 10).
+-define(MSG(Msg), io:format("~s~n", [Msg])).
+
+%% @doc
+%% This script generates html bookmarks page from a given input file.
+%% Example of an input file:
+%%
+%%
+%% # Commentary
+%% # another commentary
+%%
+%% link0=http://link0.com
+%%
+%% ---Header1---
+%%
+%% link1 = http://link1.com
+%% link2 = http://link2.com
+%% link3 = http://link3.com
+%%
+%% ---Header2---
+%%
+%% link4 = http://link4.com
+%% link5 = http://link5.com
+%% ...
+%%
+%% @end
+
+%%------------------------------------------------------------------------------
+%% Main entry point
+%%------------------------------------------------------------------------------
+main([Filename]) ->
+  case file:open(Filename, [read]) of
+    {ok, File} ->
+      Links = read(File),
+      file:close(File),
+      generate(Links, Filename);
+    {error, _} ->
+      ?MSG("Can't open file. Aborting.")
+  end;
+
+main(_) ->
+  usage(),
+  halt(1).
+
+usage() ->
+  ?MSG("Usage: bgen <file>").
+
+%%------------------------------------------------------------------------------
+%% File reading/writing
+%%------------------------------------------------------------------------------
+read(File) ->
+  read(File, [], file:read_line(File)).
+
+read(_, Links, eof) ->
+  Links;
+
+read(_, _, {error, _}) ->
+  ?MSG("Can't read file. Aborting."),
+  halt(1);
+
+read(File, Links, {ok, Line}) ->
+  Next= file:read_line(File),
+  case parse(Line) of
+    undefined ->
+      ?MSG("File parsing error. Aborting."),
+      halt(1);
+    comment ->
+      read(File, Links, Next);
+    blank ->
+      read(File, Links, Next);
+    {ContentType, Data} ->
+      read(File, Links ++ [apply(?MODULE, ContentType, Data)], Next)
+  end.
+
+generate(Links, Filename) ->
+  Fullname = Filename ++ ".html",
+  case file:copy(?TEMPL, Fullname) of
+    {ok, _} ->
+      case file:open(Fullname, [append]) of
+        {ok, File} ->
+          io:format(File, "~s~n</body>~n</html>~n", [lists:concat(Links)]),
+          file:close(File);
+        {error, _} ->
+          ?MSG("Can't open generated file. Aborting.")
+      end;
+    {error, _} ->
+      ?MSG("Can't copy template file. Aborting.")
+  end.
+
+%%------------------------------------------------------------------------------
+%% Simple parsing
+%%------------------------------------------------------------------------------
+parse(Line) ->
+  Funs = [fun parse_comment/1,
+          fun parse_header/1,
+          fun parse_link/1],
+  parse(Funs, Line).
+
+parse(_, "\n") ->
+  blank;
+
+parse([], _) ->
+  undefined;
+
+parse([Fun | Tail], Line) ->
+  case Fun(Line) of
+    {true, Result} ->
+      Result;
+    false ->
+      parse(Tail, Line)
+  end.
+
+parse_comment(Line) ->
+  case match(Line, "\\s*#.*") of
+    true  -> {true, comment};
+    false -> false
+  end.
+
+parse_header(Line) ->
+  case match(Line, "---.*---") of
+    true  -> {true, {header, [string:substr(Line, 4, length(Line) - 7)]}};
+    false -> false
+  end.
+
+parse_link(Line) ->
+  case string:tokens(Line, [$=, ?NEWLINE]) of
+    [Title, Href] ->
+      {true, {link, [string:strip(Title), string:strip(Href)]}};
+    _ ->
+      false
+  end.
+
+%%------------------------------------------------------------------------------
+%% Auxiliary functions
+%%------------------------------------------------------------------------------
+link(Title, Href) ->
+  "<a href=\"" ++ Href ++ "\">" ++ Title ++ "</a></br>\n".
+
+header(Title) ->
+  "<h3>" ++ Title ++ "</h3>\n".
+
+match(String, RE) ->
+  case re:run(String, RE) of
+    {match, _} ->
+      true;
+    nomatch ->
+      false
+  end.
