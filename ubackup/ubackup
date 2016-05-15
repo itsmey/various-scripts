@@ -1,0 +1,160 @@
+#!/bin/bash
+
+# directories to backup
+BACKUP="\
+dir1 \
+dir2 \
+dir3"
+
+# password, encoded in base64
+PASS=cGFzc3dvcmQK
+
+DATE=`date +%Y_%m_%d_%H_%M`
+
+
+function usage_fn {
+  echo "
+ubackup is a script for automatic directories backup, inсluding .tar.gz
+archiving and gpg encryption
+
+usage:
+
+ubackup --action backup --dest <dest>
+    archived and encrypted directories will be put into dest directory
+
+ubackup --action restore --source <src> --dest <src>
+    targets of this action are .gpg files in source directory, previously
+    created with 'backup' action. restored directories will be put into
+    dest directory
+"
+}
+
+function check_dir {
+if [ -z $1 ]
+then
+  echo "You must specify directory. Type -h for help."
+  exit 100
+elif [ ! -d $1 ]; then
+  echo "You must specify directory. Type -h for help."
+  exit 100
+elif [ ! -r $1 ]; then
+  echo "You must specify directory. Type -h for help."
+  exit 100
+fi
+}
+
+function backup_fn {
+  NAME=`basename $1`
+  DIR=`dirname $1`
+  TAR="$NAME""_$DATE.tar.gz"
+  cd $DIR
+  echo
+  echo "* Creating $TAR..."
+  tar -czf $TAR $NAME
+  echo "* Encrypting $TAR with gpg..."
+  gpg -c --passphrase $GOODPASS $TAR
+  echo "* Removing $TAR..."
+  rm $TAR
+  echo "* Moving $TAR.gpg to $2..."
+  mv $TAR.gpg $2
+}
+
+function restore_fn {
+  NAME=`basename $1`
+  DIR=`dirname $1`
+  TAR=$DIR/`basename $1 .gpg`
+  cd $2
+  echo
+  echo "* Decrypting $NAME..."
+  gpg --passphrase $GOODPASS $1
+  echo "* Dearchiving $TAR..."
+  tar -xf $TAR
+  echo "* Removing $TAR..."
+  rm $TAR
+}
+
+while [[ $# > 0 ]]
+do
+key="$1"
+
+case $key in
+    -h|--help)
+    usage_fn
+    exit 0
+    ;;
+    -a|--action)
+    ACTION="$2"
+    shift
+    ;;
+    -s|--source)
+    SOURCE="$2"
+    shift
+    ;;
+    -d|--dest)
+    DEST="$2"
+    shift
+    ;;
+    *)
+      echo "Unknown argument $key. Exiting."
+      exit 100
+    ;;
+esac
+shift
+done
+
+SDIR=`pwd`
+
+GOODPASS=`echo $PASS | base64 -d`
+
+if [ "$ACTION" == "backup" ]; then
+  echo
+  check_dir $DEST
+  DEST=`realpath $DEST`
+  echo "This directories will be archived, encrypted and put into $DEST:"
+  for arg in $BACKUP
+  do
+    echo $arg
+  done
+  echo
+  echo "Enter to continue."
+  read
+  for arg in $BACKUP
+  do
+    backup_fn $arg $DEST
+  done
+  echo
+  echo "Backup done."
+elif [ "$ACTION" == "restore" ]; then
+  echo
+  check_dir $SOURCE
+  check_dir $DEST
+  SOURCE=`realpath $SOURCE`
+  DEST=`realpath $DEST`
+
+  RESTORE=`find $SOURCE \-name \*\.gpg`
+  if [ -z "$RESTORE" ]; then
+    echo "There are no encrypted files to restore in $SOURCE. Exiting."
+    exit 100
+  fi
+  echo "This files will be decrypted, dearchived, and data will be put into $DEST:"
+  for arg in $RESTORE
+  do
+    echo $arg
+  done
+  echo
+  echo "Enter to continue."
+  read
+  for arg in $RESTORE
+  do
+    restore_fn $arg $DEST
+  done
+  echo
+  echo "Restore done."
+else
+  echo "Action must be 'backup' or 'restore'. Exiting."
+  exit 100
+fi
+
+cd $SDIR
+
+exit 0
